@@ -3,7 +3,6 @@ package registry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"path"
 	"time"
 
@@ -107,7 +106,6 @@ func (r *Registry) Deregister(ctx context.Context, service *registry.ServiceInst
 func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	serviceNamePath := path.Join(r.opts.rootPath, serviceName)
 	servicesID, _, err := r.conn.Children(serviceNamePath)
-	fmt.Printf("r.conn.Children:%+v\n", servicesID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +122,6 @@ func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*regis
 		}
 		items = append(items, item)
 	}
-	fmt.Printf("===%+v\n", items)
 	return items, nil
 }
 
