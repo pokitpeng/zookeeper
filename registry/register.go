@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 	"time"
 
@@ -20,30 +21,30 @@ type Option func(o *options)
 
 type options struct {
 	ctx      context.Context
-	rootPath string // 服务根节点
+	rootPath string
 	timeout  time.Duration
 }
 
-// Context with registry context.
-func Context(ctx context.Context) Option {
+// WithContext with registry context.
+func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// RootPath with registry root path.
-func RootPath(path string) Option {
+// WithRootPath with registry root path.
+func WithRootPath(path string) Option {
 	return func(o *options) { o.rootPath = path }
 }
 
-// Timeout with registry timeout.
-func Timeout(timeout time.Duration) Option {
+// WithTimeout with registry timeout.
+func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
 // Registry is consul registry
 type Registry struct {
 	opts      *options
-	zkServers []string // 多个节点地址
-	conn      *zk.Conn // zk的客户端连接
+	zkServers []string
+	conn      *zk.Conn
 }
 
 func New(zkServers []string, opts ...Option) (*Registry, error) {
@@ -69,15 +70,11 @@ func New(zkServers []string, opts ...Option) (*Registry, error) {
 func (r *Registry) Register(ctx context.Context, service *registry.ServiceInstance) error {
 	var data []byte
 	var err error
-
-	if err := r.ensureName(r.opts.rootPath, data); err != nil {
-		return err
-	}
-	if err = r.ensureName(service.Name, data); err != nil {
+	if err := r.ensureName(r.opts.rootPath, []byte("")); err != nil {
 		return err
 	}
 	serviceNamePath := path.Join(r.opts.rootPath, service.Name)
-	if err = r.ensureName(serviceNamePath, data); err != nil {
+	if err = r.ensureName(serviceNamePath, []byte("")); err != nil {
 		return err
 	}
 	if data, err = json.Marshal(service); err != nil {
@@ -110,10 +107,10 @@ func (r *Registry) Deregister(ctx context.Context, service *registry.ServiceInst
 func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	serviceNamePath := path.Join(r.opts.rootPath, serviceName)
 	servicesID, _, err := r.conn.Children(serviceNamePath)
+	fmt.Printf("r.conn.Children:%+v\n", servicesID)
 	if err != nil {
 		return nil, err
 	}
-
 	var items []*registry.ServiceInstance
 	for _, service := range servicesID {
 		var item *registry.ServiceInstance
@@ -127,23 +124,23 @@ func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*regis
 		}
 		items = append(items, item)
 	}
+	fmt.Printf("===%+v\n", items)
 	return items, nil
 }
 
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
-	return newWatcher(ctx, serviceName, r.opts.rootPath)
+	return newWatcher(ctx, r.conn, serviceName, r.opts.rootPath)
 }
 
-// ensureName 确保节点存在，若不存在，创建并写入数据
-func (r *Registry) ensureName(name string, data []byte) error {
-	dataPath := path.Join(r.opts.rootPath, name)
-	exists, _, err := r.conn.Exists(dataPath)
+// ensureName ensure node exists, if not exist, create and set data
+func (r *Registry) ensureName(path string, data []byte) error {
+	exists, _, err := r.conn.Exists(path)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		_, err := r.conn.Create(dataPath, data, 0, zk.WorldACL(zk.PermAll))
-		if err != nil && err != zk.ErrNodeExists {
+		_, err := r.conn.Create(path, data, 0, zk.WorldACL(zk.PermAll))
+		if err != nil {
 			return err
 		}
 	}

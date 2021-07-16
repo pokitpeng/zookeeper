@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 
 	"github.com/go-kratos/kratos/v2/registry"
@@ -18,18 +19,23 @@ type watcher struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	rootPath    string
-	watchEvent  <-chan zk.Event
+	watchChan   <-chan zk.Event
 	conn        *zk.Conn
 }
 
-func newWatcher(ctx context.Context, serviceName, rootPath string) (*watcher, error) {
-	w := &watcher{
+func newWatcher(ctx context.Context, conn *zk.Conn, serviceName, rootPath string) (w *watcher, err error) {
+	w = &watcher{
 		serviceName: serviceName,
 		rootPath:    rootPath,
+		conn:        conn,
 	}
 	w.ctx, w.cancel = context.WithCancel(ctx)
-	_, _, events, err := w.conn.ChildrenW(path.Join(rootPath, serviceName))
-	w.watchEvent = events
+	serviceNamePath := path.Join(rootPath, serviceName)
+	fmt.Println(serviceNamePath)
+	_, _, w.watchChan, err = w.conn.ChildrenW(serviceNamePath)
+	if err != nil {
+		return nil, err
+	}
 	return w, err
 }
 
@@ -38,7 +44,7 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 		select {
 		case <-w.ctx.Done():
 			return nil, w.ctx.Err()
-		case <-w.watchEvent:
+		case <-w.watchChan:
 		}
 		serviceNamePath := path.Join(w.rootPath, w.serviceName)
 		servicesID, _, err := w.conn.Children(serviceNamePath)
