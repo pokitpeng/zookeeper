@@ -24,7 +24,7 @@ func (s *server) SayHello(ctx context.Context, in *helloworld.HelloRequest) (*he
 }
 
 func main() {
-	r, err := registry.New([]string{"113.31.116.149:2181"})
+	r, err := registry.New([]string{"127.0.0.1:2181"})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -54,7 +54,6 @@ func main() {
 		),
 		kratos.Registrar(r),
 	)
-
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

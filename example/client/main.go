@@ -13,12 +13,12 @@ import (
 )
 
 func main() {
-	r, err := registry.New([]string{"113.31.116.149:2181"})
+	r, err := registry.New([]string{"127.0.0.1:2181"})
 	if err != nil {
 		panic(err)
 	}
 	callHTTP(r)
-	// callGRPC(r)
+	callGRPC(r)
 }
 
 func callGRPC(r *registry.Registry) {
