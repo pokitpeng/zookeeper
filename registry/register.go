@@ -111,7 +111,7 @@ func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*regis
 	}
 	var items []*registry.ServiceInstance
 	for _, service := range servicesID {
-		var item *registry.ServiceInstance
+		var item = &registry.ServiceInstance{}
 		servicePath := path.Join(serviceNamePath, service)
 		serviceInstanceByte, _, err := r.conn.Get(servicePath)
 		if err != nil {

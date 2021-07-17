@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"time"
 
 	"github.com/go-kratos/kratos/examples/helloworld/helloworld"
 	"github.com/go-kratos/kratos/v2/middleware/recovery"
@@ -50,7 +49,6 @@ func callHTTP(r *registry.Registry) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	time.Sleep(time.Millisecond * 250)
 	client := helloworld.NewGreeterHTTPClient(conn)
 	reply, err := client.SayHello(context.Background(), &helloworld.HelloRequest{Name: "kratos_http"})
 	if err != nil {
