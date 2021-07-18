@@ -53,7 +53,7 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 		}
 		var items []*registry.ServiceInstance
 		for _, service := range servicesID {
-			var item *registry.ServiceInstance
+			var item = &registry.ServiceInstance{}
 			servicePath := path.Join(serviceNamePath, service)
 			serviceInstanceByte, _, err := w.conn.Get(servicePath)
 			if err != nil {
