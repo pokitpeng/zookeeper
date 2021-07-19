@@ -3,7 +3,6 @@ package registry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"path"
 
 	"github.com/go-kratos/kratos/v2/registry"
@@ -15,27 +14,33 @@ var (
 )
 
 type watcher struct {
-	serviceName string
-	ctx         context.Context
-	cancel      context.CancelFunc
-	rootPath    string
-	watchChan   <-chan zk.Event
-	conn        *zk.Conn
+	serviceNamePath string
+	ctx             context.Context
+	cancel          context.CancelFunc
+	watchChan       chan bool
+	conn            *zk.Conn
 }
 
-func newWatcher(ctx context.Context, conn *zk.Conn, serviceName, rootPath string) (w *watcher, err error) {
+func newWatcher(ctx context.Context, conn *zk.Conn, serviceNamePath string) (w *watcher, err error) {
 	w = &watcher{
-		serviceName: serviceName,
-		rootPath:    rootPath,
-		conn:        conn,
+		serviceNamePath: serviceNamePath,
+		conn:            conn,
 	}
 	w.ctx, w.cancel = context.WithCancel(ctx)
-	serviceNamePath := path.Join(rootPath, serviceName)
-	fmt.Println(serviceNamePath)
-	_, _, w.watchChan, err = w.conn.ChildrenW(serviceNamePath)
+	_, _, zkEvent, err := w.conn.ChildrenW(serviceNamePath)
 	if err != nil {
 		return nil, err
 	}
+	go func() {
+		for {
+			select {
+			case zt := <-zkEvent:
+				if zt.Type == zk.EventNodeChildrenChanged {
+					w.watchChan <- true
+				}
+			}
+		}
+	}()
 	return w, err
 }
 
@@ -46,15 +51,14 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 			return nil, w.ctx.Err()
 		case <-w.watchChan:
 		}
-		serviceNamePath := path.Join(w.rootPath, w.serviceName)
-		servicesID, _, err := w.conn.Children(serviceNamePath)
+		servicesID, _, err := w.conn.Get(w.serviceNamePath)
 		if err != nil {
 			return nil, err
 		}
 		var items []*registry.ServiceInstance
 		for _, service := range servicesID {
 			var item = &registry.ServiceInstance{}
-			servicePath := path.Join(serviceNamePath, service)
+			servicePath := path.Join(w.serviceNamePath, string(service))
 			serviceInstanceByte, _, err := w.conn.Get(servicePath)
 			if err != nil {
 				return nil, err

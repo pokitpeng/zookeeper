@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 	"time"
 
@@ -88,10 +89,13 @@ func (r *Registry) Register(ctx context.Context, service *registry.ServiceInstan
 
 // Deregister the registration.
 func (r *Registry) Deregister(ctx context.Context, service *registry.ServiceInstance) error {
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	servicePath := path.Join(r.opts.rootPath, service.Name, service.ID)
 	go func() {
 		err := r.conn.Delete(servicePath, -1)
+		if err != nil {
+			fmt.Printf("r.conn.Delete err: %s\n", err.Error())
+		}
 		ch <- err
 	}()
 	var err error
@@ -126,7 +130,8 @@ func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*regis
 }
 
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
-	return newWatcher(ctx, r.conn, serviceName, r.opts.rootPath)
+	serviceNamePath := path.Join(r.opts.rootPath, serviceName)
+	return newWatcher(ctx, r.conn, serviceNamePath)
 }
 
 // ensureName ensure node exists, if not exist, create and set data
