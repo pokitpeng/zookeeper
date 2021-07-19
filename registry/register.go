@@ -8,13 +8,15 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/registry"
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/go-zookeeper/zk"
 )
 
 var (
 	_ registry.Registrar = &Registry{}
 	_ registry.Discovery = &Registry{}
 )
+
+var gloableEvent = make(chan bool, 1)
 
 // Option is etcd registry option.
 type Option func(o *options)
@@ -42,9 +44,10 @@ func WithTimeout(timeout time.Duration) Option {
 
 // Registry is consul registry
 type Registry struct {
-	opts      *options
-	zkServers []string
-	conn      *zk.Conn
+	opts       *options
+	zkServers  []string
+	watchEvent <-chan zk.Event
+	conn       *zk.Conn
 }
 
 func New(zkServers []string, opts ...Option) (*Registry, error) {
@@ -56,31 +59,44 @@ func New(zkServers []string, opts ...Option) (*Registry, error) {
 	for _, o := range opts {
 		o(options)
 	}
-	conn, _, err := zk.Connect(zkServers, options.timeout)
+	conn, event, err := zk.Connect(zkServers, options.timeout)
 	if err != nil {
 		return nil, err
 	}
 	return &Registry{
-		opts:      options,
-		zkServers: zkServers,
-		conn:      conn,
+		opts:       options,
+		zkServers:  zkServers,
+		conn:       conn,
+		watchEvent: event,
 	}, err
 }
 
 func (r *Registry) Register(ctx context.Context, service *registry.ServiceInstance) error {
 	var data []byte
 	var err error
+	serviceNamePath := path.Join(r.opts.rootPath, service.Name)
+	servicePath := path.Join(serviceNamePath, service.ID)
+	go func() {
+		for {
+			select {
+			case e := <-r.watchEvent:
+				if e.Type == zk.EventNodeChildrenChanged && e.Path == servicePath {
+					gloableEvent <- true
+				}
+			}
+		}
+	}()
 	if err := r.ensureName(r.opts.rootPath, []byte("")); err != nil {
 		return err
 	}
-	serviceNamePath := path.Join(r.opts.rootPath, service.Name)
+
 	if err = r.ensureName(serviceNamePath, []byte("")); err != nil {
 		return err
 	}
 	if data, err = json.Marshal(service); err != nil {
 		return err
 	}
-	servicePath := path.Join(serviceNamePath, service.ID)
+
 	if err = r.ensureName(servicePath, data); err != nil {
 		return err
 	}
@@ -94,7 +110,7 @@ func (r *Registry) Deregister(ctx context.Context, service *registry.ServiceInst
 	go func() {
 		err := r.conn.Delete(servicePath, -1)
 		if err != nil {
-			fmt.Printf("r.conn.Delete err: %s\n", err.Error())
+			fmt.Printf("delete node [%s] err: %s\n", servicePath, err.Error())
 		}
 		ch <- err
 	}()

@@ -4,11 +4,12 @@ import (
 	"context"
 	"log"
 
+	"zookeeper/registry"
+
 	"github.com/go-kratos/kratos/examples/helloworld/helloworld"
 	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	"github.com/go-kratos/kratos/v2/transport/http"
-	"zookeeper/registry"
 )
 
 func main() {
@@ -17,6 +18,7 @@ func main() {
 		panic(err)
 	}
 	callHTTP(r)
+	// todo: rpc error: code = DeadlineExceeded desc = context deadline exceeded problem
 	callGRPC(r)
 }
 
@@ -45,6 +47,7 @@ func callHTTP(r *registry.Registry) {
 		),
 		http.WithEndpoint("discovery:///helloworld"),
 		http.WithDiscovery(r),
+		http.WithBlock(),
 	)
 	if err != nil {
 		log.Fatal(err)

@@ -11,8 +11,9 @@ import (
 func TestRegistry(t *testing.T) {
 	ctx := context.Background()
 	s := &registry.ServiceInstance{
-		ID:   "0",
-		Name: "helloworld",
+		ID:        "0",
+		Name:      "helloworld",
+		Endpoints: []string{"http://127.0.0.1:1111"},
 	}
 
 	r, _ := New([]string{"127.0.0.1:2181"})

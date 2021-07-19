@@ -6,7 +6,7 @@ import (
 	"path"
 
 	"github.com/go-kratos/kratos/v2/registry"
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/go-zookeeper/zk"
 )
 
 var (
@@ -17,7 +17,6 @@ type watcher struct {
 	serviceNamePath string
 	ctx             context.Context
 	cancel          context.CancelFunc
-	watchChan       chan bool
 	conn            *zk.Conn
 }
 
@@ -27,20 +26,13 @@ func newWatcher(ctx context.Context, conn *zk.Conn, serviceNamePath string) (w *
 		conn:            conn,
 	}
 	w.ctx, w.cancel = context.WithCancel(ctx)
-	_, _, zkEvent, err := w.conn.ChildrenW(serviceNamePath)
+	ss, _, err := conn.Children(serviceNamePath)
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		for {
-			select {
-			case zt := <-zkEvent:
-				if zt.Type == zk.EventNodeChildrenChanged {
-					w.watchChan <- true
-				}
-			}
-		}
-	}()
+	if len(ss) > 0 {
+		gloableEvent <- true
+	}
 	return w, err
 }
 
@@ -49,9 +41,9 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 		select {
 		case <-w.ctx.Done():
 			return nil, w.ctx.Err()
-		case <-w.watchChan:
+		case <-gloableEvent:
 		}
-		servicesID, _, err := w.conn.Get(w.serviceNamePath)
+		servicesID, _, err := w.conn.Children(w.serviceNamePath)
 		if err != nil {
 			return nil, err
 		}
@@ -66,6 +58,7 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 			if err := json.Unmarshal(serviceInstanceByte, item); err != nil {
 				return nil, err
 			}
+			// fmt.Printf("item:%+v\n", item)
 			items = append(items, item)
 		}
 		return items, nil
