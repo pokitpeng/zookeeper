@@ -55,5 +55,5 @@ func callHTTP(r *registry.Registry) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("[http] SayHello %s\n", reply.Message)
+	log.Printf("[http] SayHello %s\n", reply)
 }
