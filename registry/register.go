@@ -16,7 +16,7 @@ var (
 	_ registry.Discovery = &Registry{}
 )
 
-var gloableEvent = make(chan bool, 1)
+var nextEvent = make(chan bool, 1)
 
 // Option is etcd registry option.
 type Option func(o *options)
@@ -81,7 +81,7 @@ func (r *Registry) Register(ctx context.Context, service *registry.ServiceInstan
 			select {
 			case e := <-r.watchEvent:
 				if e.Type == zk.EventNodeChildrenChanged && e.Path == servicePath {
-					gloableEvent <- true
+					nextEvent <- true
 				}
 			}
 		}

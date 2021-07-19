@@ -30,8 +30,9 @@ func newWatcher(ctx context.Context, conn *zk.Conn, serviceNamePath string) (w *
 	if err != nil {
 		return nil, err
 	}
+	// zk中如果有已注册的服务，需要传递nextEvent，防止获取ServiceInstance阻塞
 	if len(ss) > 0 {
-		gloableEvent <- true
+		nextEvent <- true
 	}
 	return w, err
 }
@@ -41,7 +42,7 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 		select {
 		case <-w.ctx.Done():
 			return nil, w.ctx.Err()
-		case <-gloableEvent:
+		case <-nextEvent:
 		}
 		servicesID, _, err := w.conn.Children(w.serviceNamePath)
 		if err != nil {
@@ -58,7 +59,6 @@ func (w watcher) Next() ([]*registry.ServiceInstance, error) {
 			if err := json.Unmarshal(serviceInstanceByte, item); err != nil {
 				return nil, err
 			}
-			// fmt.Printf("item:%+v\n", item)
 			items = append(items, item)
 		}
 		return items, nil
