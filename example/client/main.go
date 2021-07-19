@@ -4,12 +4,11 @@ import (
 	"context"
 	"log"
 
-	"zookeeper/registry"
-
 	"github.com/go-kratos/kratos/examples/helloworld/helloworld"
 	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/pokitpeng/zookeeper/registry"
 )
 
 func main() {

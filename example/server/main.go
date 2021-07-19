@@ -10,7 +10,7 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	"github.com/go-kratos/kratos/v2/transport/http"
-	"zookeeper/registry"
+	"github.com/pokitpeng/zookeeper/registry"
 )
 
 // server is used to implement helloworld.GreeterServer.

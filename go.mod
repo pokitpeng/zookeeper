@@ -1,4 +1,4 @@
-module zookeeper
+module github.com/pokitpeng/zookeeper
 
 go 1.16
 
