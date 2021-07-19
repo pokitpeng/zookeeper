@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/go-kratos/kratos/v2/registry"
-	"github.com/go-zookeeper/zk"
 )
 
 var (
@@ -12,12 +11,10 @@ var (
 )
 
 type watcher struct {
-	serviceNamePath string
-	ctx             context.Context
-	cancel          context.CancelFunc
-	conn            *zk.Conn
-	event           chan struct{}
-	set             *serviceSet
+	ctx    context.Context
+	cancel context.CancelFunc
+	event  chan struct{}
+	set    *serviceSet
 }
 
 func (w watcher) Next() (services []*registry.ServiceInstance, err error) {

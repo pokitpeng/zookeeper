@@ -43,11 +43,10 @@ func WithTimeout(timeout time.Duration) Option {
 
 // Registry is consul registry
 type Registry struct {
-	opts      *options
-	zkServers []string
-	conn      *zk.Conn
-	lock      sync.Mutex
-	registry  map[string]*serviceSet
+	opts     *options
+	conn     *zk.Conn
+	lock     sync.Mutex
+	registry map[string]*serviceSet
 }
 
 func New(zkServers []string, opts ...Option) (*Registry, error) {
@@ -64,10 +63,9 @@ func New(zkServers []string, opts ...Option) (*Registry, error) {
 		return nil, err
 	}
 	return &Registry{
-		opts:      options,
-		zkServers: zkServers,
-		conn:      conn,
-		registry:  make(map[string]*serviceSet),
+		opts:     options,
+		conn:     conn,
+		registry: make(map[string]*serviceSet),
 	}, err
 }
 
