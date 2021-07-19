@@ -18,7 +18,6 @@ func main() {
 		panic(err)
 	}
 	callHTTP(r)
-	// todo: rpc error: code = DeadlineExceeded desc = context deadline exceeded problem
 	callGRPC(r)
 }
 
@@ -58,5 +57,4 @@ func callHTTP(r *registry.Registry) {
 		log.Fatal(err)
 	}
 	log.Printf("[http] SayHello %s\n", reply.Message)
-
 }

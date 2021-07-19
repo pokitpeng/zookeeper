@@ -3,8 +3,9 @@ package registry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"path"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-kratos/kratos/v2/registry"
@@ -15,8 +16,6 @@ var (
 	_ registry.Registrar = &Registry{}
 	_ registry.Discovery = &Registry{}
 )
-
-var nextEvent = make(chan bool, 1)
 
 // Option is etcd registry option.
 type Option func(o *options)
@@ -44,10 +43,11 @@ func WithTimeout(timeout time.Duration) Option {
 
 // Registry is consul registry
 type Registry struct {
-	opts       *options
-	zkServers  []string
-	watchEvent <-chan zk.Event
-	conn       *zk.Conn
+	opts      *options
+	zkServers []string
+	conn      *zk.Conn
+	lock      sync.Mutex
+	registry  map[string]*serviceSet
 }
 
 func New(zkServers []string, opts ...Option) (*Registry, error) {
@@ -59,59 +59,44 @@ func New(zkServers []string, opts ...Option) (*Registry, error) {
 	for _, o := range opts {
 		o(options)
 	}
-	conn, event, err := zk.Connect(zkServers, options.timeout)
+	conn, _, err := zk.Connect(zkServers, options.timeout)
 	if err != nil {
 		return nil, err
 	}
 	return &Registry{
-		opts:       options,
-		zkServers:  zkServers,
-		conn:       conn,
-		watchEvent: event,
+		opts:      options,
+		zkServers: zkServers,
+		conn:      conn,
+		registry:  make(map[string]*serviceSet),
 	}, err
 }
 
 func (r *Registry) Register(ctx context.Context, service *registry.ServiceInstance) error {
 	var data []byte
 	var err error
-	serviceNamePath := path.Join(r.opts.rootPath, service.Name)
-	servicePath := path.Join(serviceNamePath, service.ID)
-	go func() {
-		for {
-			select {
-			case e := <-r.watchEvent:
-				if e.Type == zk.EventNodeChildrenChanged && e.Path == servicePath {
-					nextEvent <- true
-				}
-			}
-		}
-	}()
 	if err := r.ensureName(r.opts.rootPath, []byte("")); err != nil {
 		return err
 	}
-
+	serviceNamePath := path.Join(r.opts.rootPath, service.Name)
 	if err = r.ensureName(serviceNamePath, []byte("")); err != nil {
 		return err
 	}
 	if data, err = json.Marshal(service); err != nil {
 		return err
 	}
-
+	servicePath := path.Join(serviceNamePath, service.ID)
 	if err = r.ensureName(servicePath, data); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Deregister the registration.
+// Deregister registry service to zookeeper.
 func (r *Registry) Deregister(ctx context.Context, service *registry.ServiceInstance) error {
 	ch := make(chan error, 1)
 	servicePath := path.Join(r.opts.rootPath, service.Name, service.ID)
 	go func() {
 		err := r.conn.Delete(servicePath, -1)
-		if err != nil {
-			fmt.Printf("delete node [%s] err: %s\n", servicePath, err.Error())
-		}
 		ch <- err
 	}()
 	var err error
@@ -123,6 +108,7 @@ func (r *Registry) Deregister(ctx context.Context, service *registry.ServiceInst
 	return err
 }
 
+// GetService get services from zookeeper
 func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	serviceNamePath := path.Join(r.opts.rootPath, serviceName)
 	servicesID, _, err := r.conn.Children(serviceNamePath)
@@ -146,8 +132,46 @@ func (r *Registry) GetService(ctx context.Context, serviceName string) ([]*regis
 }
 
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
-	serviceNamePath := path.Join(r.opts.rootPath, serviceName)
-	return newWatcher(ctx, r.conn, serviceNamePath)
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	set, ok := r.registry[serviceName]
+	if !ok {
+		set = &serviceSet{
+			watcher:     make(map[*watcher]struct{}, 0),
+			services:    &atomic.Value{},
+			serviceName: serviceName,
+		}
+		r.registry[serviceName] = set
+	}
+	// 初始化watcher
+	w := &watcher{
+		event: make(chan struct{}, 1),
+	}
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	w.set = set
+	set.lock.Lock()
+	set.watcher[w] = struct{}{}
+	set.lock.Unlock()
+	ss, _ := set.services.Load().([]*registry.ServiceInstance)
+	if len(ss) > 0 {
+		// 如果services有值需要推送给watcher，否则watch的时候可能会永远阻塞拿不到初始的数据
+		w.event <- struct{}{}
+	}
+
+	// 放在最后是为了防止漏推送
+	if !ok {
+		go r.resolve(set)
+	}
+	return w, nil
+}
+
+func (r *Registry) resolve(ss *serviceSet) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	services, err := r.GetService(ctx, ss.serviceName)
+	cancel()
+	if err == nil && len(services) > 0 {
+		ss.broadcast(services)
+	}
 }
 
 // ensureName ensure node exists, if not exist, create and set data
